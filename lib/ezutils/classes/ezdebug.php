@@ -889,6 +889,11 @@ class eZDebug
             eZDir::mkdir( $logDir, false, true );
         }
         $oldumask = @umask( 0 );
+        if (version_compare(PHP_VERSION, '5.3.0') >= 0) {
+            clearstatcache( true, $fileName );
+        } elseif (mt_rand(0, 1000) == 0) {
+            clearstatcache();
+        }
         $fileExisted = file_exists( $fileName );
         if ( $fileExisted and
              filesize( $fileName ) > eZDebug::maxLogSize() )

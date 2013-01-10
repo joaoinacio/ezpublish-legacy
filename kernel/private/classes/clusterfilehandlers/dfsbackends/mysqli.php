@@ -64,8 +64,8 @@ class eZDFSFileHandlerMySQLiBackend implements eZClusterEventNotifier
             self::$dbparams['user']       = $fileINI->variable( 'eZDFSClusteringSettings', 'DBUser' );
             self::$dbparams['pass']       = $fileINI->variable( 'eZDFSClusteringSettings', 'DBPassword' );
 
-            self::$dbparams['max_connect_tries'] = $fileINI->variable( 'eZDFSClusteringSettings', 'DBConnectRetries' );
-            self::$dbparams['max_execute_tries'] = $fileINI->variable( 'eZDFSClusteringSettings', 'DBExecuteRetries' );
+            self::$dbparams['max_connect_tries'] = (int)$fileINI->variable( 'eZDFSClusteringSettings', 'DBConnectRetries' );
+            self::$dbparams['max_execute_tries'] = (int)$fileINI->variable( 'eZDFSClusteringSettings', 'DBExecuteRetries' );
 
             self::$dbparams['sql_output'] = $siteINI->variable( "DatabaseSettings", "SQLOutput" ) == "enabled";
 
@@ -1227,11 +1227,11 @@ class eZDFSFileHandlerMySQLiBackend implements eZClusterEventNotifier
                 return false;
             }
 
-            break; // All is good, so break out of loop
+            // All is good, commit and return
+            $this->_commit( $fname );
+            return $result;
         }
-
-        $this->_commit( $fname );
-        return $result;
+        return false;
     }
 
     protected function _handleErrorType( $res )

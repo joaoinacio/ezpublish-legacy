@@ -757,26 +757,28 @@ class eZINI
         else
             $this->Codec = null;
 
-        foreach ( explode( "\n", $contents ) as $line )
-        {
-            if ( $line == '' or $line[0] == '#' )
-                continue;
-            if ( preg_match( "/^(.+)##.*/", $line, $regs ) )
-                $line = $regs[1];
-            if ( trim( $line ) == '' )
-                continue;
-            // check for new block
-            if ( preg_match("#^\[(.+)\]\s*$#", $line, $newBlockNameArray ) )
-            {
-                $newBlockName = trim( $newBlockNameArray[1] );
-                $currentBlock = $newBlockName;
-                continue;
-            }
+        if ( $placement )
+            $blockValuesRef =& $this->BlockValuesPlacement;
+        else
+            $blockValuesRef =& $this->BlockValues;
 
-            // check for variable
-            if ( preg_match("#^([\w_*@-]+)\\[\\]$#", $line, $valueArray ) )
-            {
-                $varName = trim( $valueArray[1] );
+        // strip comments
+        $contents = preg_replace( '/(#.*)$/m', '', $contents );
+
+        // block declarations
+        if ( preg_match_all( "/^\[(.+)\]\s*/m", $contents, $blockMatches, PREG_OFFSET_CAPTURE ) )
+            $blockMatches = $blockMatches[1];
+
+        // new/reset variable definitions
+        if ( preg_match_all( '/^([\w_*@-]+)\[\]$/m', $contents, $varArrMatches, PREG_OFFSET_CAPTURE ) ) {
+            $varArrMatches = $varArrMatches[1];
+            $currentBlockMatch = 0;
+            $blockCount = count($blockMatches);
+            foreach ($varArrMatches as $newVar) {
+                while ( ($currentBlockMatch < $blockCount-1) && ( $newVar[1] >= $blockMatches[$currentBlockMatch+1][1]) )
+                    $currentBlockMatch++;
+                $currentBlock = $blockMatches[$currentBlockMatch][0];
+                $varName = trim($newVar[0]);
 
                 if ( $placement )
                 {
@@ -786,13 +788,11 @@ class eZINI
                         eZDebug::writeError( "Wrong operation on the ini setting array '$varName'", __METHOD__ );
                         continue;
                     }
-
                     $this->BlockValuesPlacement[$currentBlock][$varName][] = $file;
                 }
                 else
                 {
                     $this->BlockValues[$currentBlock][$varName] = array();
-
                     // In direct access mode we create empty elements at the beginning of an array
                     // in case it is redefined in this ini file. So when we will save it, definition
                     // will be created as well.
@@ -802,48 +802,35 @@ class eZINI
                     }
                 }
             }
-            else if ( preg_match("#^([\w_*@-]+)(\\[([^\\]]*)\\])?=(.*)$#", $line, $valueArray ) )
-            {
-                $varName = trim( $valueArray[1] );
-                $varValue = $valueArray[4];
+        }
 
-                if ( $valueArray[2] )
-                {
-                    if ( $valueArray[3] )
-                    {
-                        $keyName = $valueArray[3];
-                        if ( $placement )
-                        {
-                            $this->BlockValuesPlacement[$currentBlock][$varName][$keyName] = $file;
-                        }
-                        else
-                        {
-                            $this->BlockValues[$currentBlock][$varName][$keyName] = $varValue;
-                        }
-                    }
-                    else
-                    {
-                        if ( $placement )
-                        {
-                            $this->BlockValuesPlacement[$currentBlock][$varName][] = $file;
-                        }
-                        else
-                        {
-                            $this->BlockValues[$currentBlock][$varName][] = $varValue;
-                        }
-                    }
-                }
+        // variables
+        if ( preg_match_all( '/^([\w_*@-]+)(\[([^\]]*)\])?=(.*)$/m', $contents, $varMatches, PREG_OFFSET_CAPTURE ) )
+        {
+            $currentBlockMatch = 0;
+            $blockCount = count($blockMatches);
+            foreach ($varMatches[0] as $n => $varData)
+            {
+                while ( ($currentBlockMatch < $blockCount-1) && ( $varData[1] >= $blockMatches[$currentBlockMatch+1][1]) )
+                    $currentBlockMatch++;
+                $currentBlock = $blockMatches[$currentBlockMatch][0];
+                $varName = trim( $varMatches[1][$n][0] );
+
+                if ( $placement )
+                    $dataToSave = $file;
                 else
+                    $dataToSave = $varMatches[4][$n][0];
+
+                if ( $varMatches[2][$n][0] )
                 {
-                    if ( $placement )
+                    if ( $varMatches[3][$n][0] )
                     {
-                        $this->BlockValuesPlacement[$currentBlock][$varName] = $file;
-                    }
-                    else
-                    {
-                        $this->BlockValues[$currentBlock][$varName] = $varValue;
-                    }
-                }
+                        $keyName = $varMatches[3][$n][0];
+                        $blockValuesRef[$currentBlock][$varName][$keyName] = $dataToSave;
+                    } else
+                        $blockValuesRef[$currentBlock][$varName][] = $dataToSave;
+                } else
+                    $blockValuesRef[$currentBlock][$varName] = $dataToSave;
             }
         }
     }

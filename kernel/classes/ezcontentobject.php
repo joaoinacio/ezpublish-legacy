@@ -1860,34 +1860,16 @@ class eZContentObject extends eZPersistentObject
 
         eZSearch::removeObjectById( $delID );
 
-        // Check if deleted object is in basket/wishlist
-        $sql = 'SELECT DISTINCT ezproductcollection_item.productcollection_id
-                FROM   ezbasket, ezwishlist, ezproductcollection_item
-                WHERE  ( ezproductcollection_item.productcollection_id=ezbasket.productcollection_id OR
-                         ezproductcollection_item.productcollection_id=ezwishlist.productcollection_id ) AND
-                       ezproductcollection_item.contentobject_id=' . $delID;
-        $rows = $db->arrayQuery( $sql );
-        if ( count( $rows ) > 0 )
-        {
-            $countElements = 50;
-            $deletedArray = array();
-            // Create array of productCollectionID will be removed from ezwishlist and ezproductcollection_item
-            foreach ( $rows as $row )
-            {
-                $deletedArray[] = $row['productcollection_id'];
-            }
-            // Split $deletedArray into several arrays with $countElements values
-            $splitted = array_chunk( $deletedArray, $countElements );
-            // Remove eZProductCollectionItem and eZWishList
-            foreach ( $splitted as $value )
-            {
-                eZPersistentObject::removeObject( eZProductCollectionItem::definition(), array( 'productcollection_id' => array( $value, '' ) ) );
-                eZPersistentObject::removeObject( eZWishList::definition(), array( 'productcollection_id' => array( $value, '' ) ) );
-            }
-        }
-        $db->query( 'UPDATE ezproductcollection_item
+        // Check if object is in products and remove it from basket/wishlist
+        $db->query( "DELETE w FROM ezwishlist w
+                    LEFT JOIN ezproductcollection_item p ON p.productcollection_id = w.productcollection_id
+                    WHERE p.contentobject_id = '$delID'" );
+        $db->query( "DELETE b FROM ezbasket b
+                    LEFT JOIN ezproductcollection_item p ON p.productcollection_id = b.productcollection_id
+                    WHERE p.contentobject_id = '$delID'" );
+        $db->query( "UPDATE ezproductcollection_item
                      SET contentobject_id = 0
-                     WHERE  contentobject_id = ' . $delID );
+                     WHERE  contentobject_id = '$delID'" );
 
         // Cleanup relations in two steps to avoid locking table for to long
         $db->query( "DELETE FROM ezcontentobject_link

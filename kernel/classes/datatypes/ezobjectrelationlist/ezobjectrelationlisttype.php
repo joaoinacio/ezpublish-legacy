@@ -408,24 +408,38 @@ class eZObjectRelationListType extends eZDataType
         $contentObjectVersion = $attribute->Version;
 
         $obj = $attribute->object();
-        //get eZContentObjectVersion
-        $currVerobj = $obj->version( $contentObjectVersion );
 
-        // create translation List
-        // $translationList will contain for example eng-GB, ita-IT etc.
-        $translationList = $currVerobj->translations( false );
+        // cleanup previous relations
+        $obj->removeContentObjectRelation( false, $contentObjectVersion, $contentClassAttributeID, eZContentObject::RELATION_ATTRIBUTE );
 
-        // get current language_code
-        $langCode = $attribute->attribute( 'language_code' );
-        // get count of LanguageCode in translationList
-        $countTsl = count( $translationList );
-        // order by asc
-        sort( $translationList );
-
-        // check if previous relation(s) should first be removed
-        if ( !$attribute->contentClassAttributeCanTranslate() )
+        // if translatable, we need to re-add the relations for other languages of (previously) published version.
+        if ( $attribute->contentClassAttributeCanTranslate() )
         {
-             $obj->removeContentObjectRelation( false, $contentObjectVersion, $contentClassAttributeID, eZContentObject::RELATION_ATTRIBUTE );
+            $langCode = $attribute->attribute( 'language_code' );
+            // get published translations of this attribute
+            $currVer = $obj->currentVersion();
+            $pubAttribute = eZContentObjectAttribute::fetch($attribute->ID, $currVer->Version);
+            // fetch attribute translations
+            $attrTrans = $pubAttribute->fetchAttributeTranslations();
+
+            $existingRelations = array();
+            foreach( $attrTrans as $attrTr )
+            {
+                // skip if language is the one being saved
+                if ( $attrTr->LanguageCode == $langCode )
+                    continue;
+
+                $relList = $attrTr->value();
+                foreach ($relList['relation_list'] as $relItem) {
+                    $existingRelations[] = $relItem['contentobject_id'];
+                }
+            }
+
+            $existingRelations == array_unique($existingRelations);
+            foreach($existingRelations as $exObjId)
+            {
+                $obj->addContentObjectRelation( $exObjId, $contentObjectVersion, $contentClassAttributeID, eZContentObject::RELATION_ATTRIBUTE );
+            }
         }
 
         foreach( $content['relation_list'] as $relationItem )

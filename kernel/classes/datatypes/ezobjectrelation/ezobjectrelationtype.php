@@ -160,31 +160,45 @@ class eZObjectRelationType extends eZDataType
 
         /** @var eZContentObject */
         $contentObject = $contentObjectAttribute->object();
+        $langCode = $contentObjectAttribute->attribute( 'language_code' );
 
-        // check if previous relation(s) can be removed according to existing translations
+        // cleanup previous relations
+        $contentObject->removeContentObjectRelation( false, $contentObjectVersion, $contentClassAttributeID, eZContentObject::RELATION_ATTRIBUTE );
+
+        // if translatable, we need to re-add the relations for other languages of (previously) published version.
         if ( $contentObjectAttribute->contentClassAttributeCanTranslate() )
         {
-            /** @var eZContentObjectVersion */
-            $currVerobj = $contentObject->version( $contentObjectVersion );
-            // get array of language codes
-            $transList = $currVerobj->translations( false );
-            $removeRelation = ( count( $transList ) == 1 );
-        }
-        else
-        {
-            // not translatable, replace/remove previous relation
-            $removeRelation = true;
+            $existingRelations = array();
+
+            $pubAttribute = eZContentObjectAttribute::fetch($contentObjectAttribute->ID, $publishedVer->Version );
+            if ( $pubAttribute )
+            {
+                // fetch published attribute translations (fallback)
+                foreach( $pubAttribute->fetchAttributeTranslations() as $attrTr )
+                {
+                    if ( $attrTr->LanguageCode == $langCode && $attrTr->attribute( 'data_int' ) )
+                        $existingRelations[$attr->languageCode] = (int)$attrTr->attribute( 'data_int' );
+                }
+            }
+
+            // fetch existing attribute translations for current editing version
+            foreach( $contentObjectAttribute->fetchAttributeTranslations() as $attrTr )
+            {
+                if ( $attrTr->LanguageCode != $langCode && $attrTr->attribute( 'data_int' ) )
+                    $existingRelations[$attr->languageCode] = (int)$attrTr->attribute( 'data_int' );
+            }
+
+            // re-add existing or new relations for other languages
+            foreach( array_unique($existingRelations) as $exObjId )
+            {
+                $contentObject->addContentObjectRelation( $exObjId, $contentObjectVersion, $contentClassAttributeID, eZContentObject::RELATION_ATTRIBUTE );
+            }
         }
 
-        if ( $removeRelation )
-        {
-             $contentObject->removeContentObjectRelation( false, $contentObjectVersion, $contentClassAttributeID, eZContentObject::RELATION_ATTRIBUTE );
-        }
-
-        $objectID = $contentObjectAttribute->attribute( "data_int" );
-
+        $objectID = $contentObjectAttribute->attribute( 'data_int' );
         if ( $objectID )
         {
+            eZDebug::writeDebug( " * $langCode: Adding new relation: $objectID" );
             $contentObject->addContentObjectRelation( $objectID, $contentObjectVersion, $contentClassAttributeID, eZContentObject::RELATION_ATTRIBUTE );
         }
     }
